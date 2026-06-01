@@ -5,7 +5,9 @@ interface Signals {
   deps: Record<string, string>;
   pkgName: string;
   readme: string;
-  fileContents: string; // all loaded file contents concatenated, lowercased
+  viteConfig: string;
+  nextConfig: string;
+  fileContents: string;
 }
 
 function gather(repo: ScannedRepo): Signals {
@@ -13,11 +15,14 @@ function gather(repo: ScannedRepo): Signals {
     ...(repo.packageJson?.dependencies ?? {}),
     ...(repo.packageJson?.devDependencies ?? {}),
   };
+  const find = (re: RegExp) => repo.files.find(f => re.test(f.path))?.content ?? '';
   return {
     paths: new Set(repo.allPaths),
     deps,
     pkgName: String(repo.packageJson?.name ?? ''),
     readme: (repo.readme ?? '').toLowerCase(),
+    viteConfig: find(/^vite\.config\.(ts|js|mjs|cjs)$/),
+    nextConfig: find(/^next\.config\.(ts|js|mjs|cjs)$/),
     fileContents: repo.files.map(f => f.content).join('\n').toLowerCase(),
   };
 }
@@ -29,88 +34,96 @@ const anyPath = (s: Signals, re: RegExp) => {
   return false;
 };
 
-// Scoring approach: each detector returns a confidence score; highest wins.
-type Score = { gen: Generator; conf: number };
+// Each hit declares "strong" — meaning a structural fingerprint, not just a text mention.
+// We only award a generator badge if at least one strong signal fires.
+interface Hit { points: number; strong: boolean }
 
-function scoreLovable(s: Signals): number {
-  let c = 0;
-  if (dep(s, 'lovable-tagger')) c += 100;                                 // smoking gun
-  if (has(s, 'src/integrations/supabase/client.ts')) c += 60;             // Lovable's exact path
-  if (s.readme.includes('lovable')) c += 40;
-  if (s.fileContents.includes('lovable-tagger')) c += 80;                 // present in vite.config
-  if (has(s, 'src/pages/Index.tsx') && has(s, 'src/pages/NotFound.tsx')) c += 25;
-  if (dep(s, '@supabase/supabase-js') && (anyPath(s, /^components\/ui\//) || dep(s, 'shadcn-ui'))) c += 15;
-  if (anyPath(s, /bun\.lockb?$/) && dep(s, '@supabase/supabase-js')) c += 10;
-  return c;
+function lovableHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  // STRONG: structural — only present in real Lovable apps
+  if (dep(s, 'lovable-tagger')) h.push({ points: 100, strong: true });
+  if (has(s, 'src/integrations/supabase/client.ts')) h.push({ points: 60, strong: true });
+  if (s.viteConfig.includes('lovable-tagger')) h.push({ points: 80, strong: true });
+  // WEAK: text mentions, structural guesses
+  if (s.readme.includes('lovable')) h.push({ points: 40, strong: false });
+  if (has(s, 'src/pages/Index.tsx') && has(s, 'src/pages/NotFound.tsx')) h.push({ points: 25, strong: false });
+  if (dep(s, '@supabase/supabase-js') && (anyPath(s, /^components\/ui\//) || dep(s, 'shadcn-ui'))) h.push({ points: 15, strong: false });
+  if (anyPath(s, /bun\.lockb?$/) && dep(s, '@supabase/supabase-js')) h.push({ points: 10, strong: false });
+  return h;
 }
 
-function scoreBolt(s: Signals): number {
-  let c = 0;
-  if (s.pkgName === 'vite-react-typescript-starter') c += 100;            // Bolt's default starter name
-  if (s.readme.includes('bolt.new') || s.readme.includes('stackblitz')) c += 50;
-  // Bolt's exact dep signature: vite + react + lucide + tailwind + no router, no tests
+function boltHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  if (s.pkgName === 'vite-react-typescript-starter') h.push({ points: 100, strong: true });
+  // Bolt's stack signature on its own is structural enough to be strong-ish, but
+  // many people choose this stack independently — keep it weak unless the name matches.
   if (dep(s, 'vite') && dep(s, 'react') && dep(s, 'lucide-react') && dep(s, 'tailwindcss')) {
-    c += 30;
-    if (!dep(s, 'react-router-dom') && !dep(s, '@tanstack/react-router')) c += 15;
-    if (!dep(s, 'vitest') && !dep(s, '@playwright/test') && !dep(s, 'jest')) c += 10;
+    h.push({ points: 30, strong: false });
+    if (!dep(s, 'react-router-dom') && !dep(s, '@tanstack/react-router')) h.push({ points: 15, strong: false });
+    if (!dep(s, 'vitest') && !dep(s, '@playwright/test') && !dep(s, 'jest')) h.push({ points: 10, strong: false });
   }
-  return c;
+  if (s.readme.includes('bolt.new') || s.readme.includes('stackblitz')) h.push({ points: 50, strong: false });
+  return h;
 }
 
-function scoreV0(s: Signals): number {
-  let c = 0;
-  if (has(s, 'components.json')) c += 60;                                 // shadcn config (v0 ships this)
-  if (dep(s, 'geist')) c += 40;                                            // Vercel's Geist font
-  if (anyPath(s, /^components\/ui\/(button|card|dialog|input)\.tsx$/)) c += 35;
-  if (s.readme.includes('v0.dev') || s.readme.includes('v0 by vercel')) c += 60;
-  if (has(s, 'app/page.tsx') && has(s, 'components.json')) c += 20;       // Next App Router + shadcn
-  if (s.fileContents.match(/created (with|by|using) v0/i)) c += 30;
-  return c;
+function v0Hits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  // STRONG
+  if (has(s, 'components.json')) h.push({ points: 60, strong: true });
+  if (dep(s, 'geist')) h.push({ points: 40, strong: true });
+  if (anyPath(s, /^components\/ui\/(button|card|dialog|input)\.tsx$/)) h.push({ points: 35, strong: true });
+  // WEAK
+  if (s.readme.includes('v0.dev') || s.readme.includes('v0 by vercel')) h.push({ points: 60, strong: false });
+  if (has(s, 'app/page.tsx') && has(s, 'components.json')) h.push({ points: 20, strong: false });
+  if (s.nextConfig.match(/created (with|by|using) v0/i)) h.push({ points: 30, strong: false });
+  return h;
 }
 
-function scoreReplit(s: Signals): number {
-  let c = 0;
-  if (has(s, '.replit')) c += 80;
-  if (has(s, 'replit.nix')) c += 70;
-  if (s.readme.includes('replit')) c += 20;
-  // Replit Agent's canonical stack
-  if (dep(s, '@neondatabase/serverless') && dep(s, 'drizzle-orm') && dep(s, 'express')) c += 30;
-  if (has(s, 'server/index.ts') && has(s, 'client/src/main.tsx') && has(s, 'shared/schema.ts')) c += 25;
-  return c;
+function replitHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  if (has(s, '.replit')) h.push({ points: 80, strong: true });
+  if (has(s, 'replit.nix')) h.push({ points: 70, strong: true });
+  if (s.readme.includes('replit')) h.push({ points: 20, strong: false });
+  if (dep(s, '@neondatabase/serverless') && dep(s, 'drizzle-orm') && dep(s, 'express')) h.push({ points: 30, strong: false });
+  if (has(s, 'server/index.ts') && has(s, 'client/src/main.tsx') && has(s, 'shared/schema.ts')) h.push({ points: 25, strong: false });
+  return h;
 }
 
-function scoreCursor(s: Signals): number {
-  let c = 0;
-  if (has(s, '.cursorrules')) c += 80;
-  if (anyPath(s, /^\.cursor\//)) c += 60;
-  if (s.readme.match(/(built|made|generated) with cursor/i)) c += 40;
-  return c;
+function cursorHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  if (has(s, '.cursorrules')) h.push({ points: 80, strong: true });
+  if (anyPath(s, /^\.cursor\//)) h.push({ points: 60, strong: true });
+  if (s.readme.match(/(built|made|generated) with cursor/i)) h.push({ points: 40, strong: false });
+  return h;
 }
 
-function scoreClaudeCode(s: Signals): number {
-  let c = 0;
-  if (has(s, 'CLAUDE.md')) c += 70;
-  if (anyPath(s, /^\.claude\//)) c += 70;
-  if (s.fileContents.match(/co-authored-by:?\s+claude/i)) c += 30;
-  if (s.readme.match(/(built|made|generated) with claude code/i)) c += 40;
-  return c;
+function claudeCodeHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  if (has(s, 'CLAUDE.md')) h.push({ points: 70, strong: true });
+  if (anyPath(s, /^\.claude\//)) h.push({ points: 70, strong: true });
+  if (s.readme.match(/(built|made|generated) with claude code/i)) h.push({ points: 40, strong: false });
+  return h;
 }
 
 export function detectGenerator(repo: ScannedRepo): Generator {
   const s = gather(repo);
 
-  const scores: Score[] = [
-    { gen: 'lovable',     conf: scoreLovable(s) },
-    { gen: 'bolt',        conf: scoreBolt(s) },
-    { gen: 'v0',          conf: scoreV0(s) },
-    { gen: 'replit',      conf: scoreReplit(s) },
-    { gen: 'cursor',      conf: scoreCursor(s) },
-    { gen: 'claude_code', conf: scoreClaudeCode(s) },
+  const groups: { gen: Generator; hits: Hit[] }[] = [
+    { gen: 'lovable',     hits: lovableHits(s) },
+    { gen: 'bolt',        hits: boltHits(s) },
+    { gen: 'v0',          hits: v0Hits(s) },
+    { gen: 'replit',      hits: replitHits(s) },
+    { gen: 'cursor',      hits: cursorHits(s) },
+    { gen: 'claude_code', hits: claudeCodeHits(s) },
   ];
 
-  scores.sort((a, b) => b.conf - a.conf);
+  // Require at least one structural (strong) signal to award a badge.
+  // Then rank by total confidence among qualifiers.
+  const qualifiers = groups
+    .filter(g => g.hits.some(h => h.strong))
+    .map(g => ({ gen: g.gen, conf: g.hits.reduce((s, h) => s + h.points, 0) }))
+    .sort((a, b) => b.conf - a.conf);
 
-  // Threshold of 50 keeps us conservative — no false "Made with X" claims.
-  if (scores[0].conf >= 50) return scores[0].gen;
+  if (qualifiers.length > 0 && qualifiers[0].conf >= 50) return qualifiers[0].gen;
   return 'unknown';
 }
