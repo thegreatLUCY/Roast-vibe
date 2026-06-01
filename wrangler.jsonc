@@ -1,0 +1,55 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "roastvibe",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "rules": [
+    { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }
+  ],
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "SCAN_RUNNER", "class_name": "ScanRunner" }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ScanRunner"]
+    }
+  ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "roastvibe",
+      "database_id": "f7a5469f-c4ec-4ed6-8b3e-d8dae9c87236",
+      "migrations_dir": "./migrations"
+    }
+  ],
+
+  "assets": {
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  "vars": {
+    "ENVIRONMENT": "production",
+    "OPENROUTER_MODEL": "anthropic/claude-sonnet-4.6",
+    "MAX_REPO_SIZE_KB": "5000",
+    "MAX_FILES_TO_SCAN": "50",
+    "MAX_LLM_INPUT_TOKENS": "8000",
+    "MAX_LLM_OUTPUT_TOKENS": "800",
+    "RATE_LIMIT_PER_IP_PER_DAY": "10",
+    "RATE_LIMIT_GLOBAL_PER_DAY": "500"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "roastvibe",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
+  "forwardPorts": [8787],
+  "portsAttributes": {
+    "8787": {
+      "label": "wrangler dev",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "npm install",
+  "remoteEnv": {
+    "WRANGLER_SEND_METRICS": "false"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib"
+      }
+    }
+  }
+}
