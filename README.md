@@ -13,6 +13,8 @@
 
 Submit a public GitHub repo. Get a deterministic **Production Readiness Score** (0–100), a savage LLM-written roast, and a shareable PNG card built for Twitter/X and Reddit.
 
+**Live app:** [roastvibe.thegreatlucy.com](https://roastvibe.thegreatlucy.com/)
+
 </div>
 
 ---
@@ -28,6 +30,34 @@ AI codegen tools (Lovable, Bolt.new, v0, Replit Agent, Cursor, Codex, and other 
 > 🟠 *"checkout by localStorage, payment by vibes"* — a fake commerce app (75/100)
 >
 > 🔴 *"Supabase plus committed .env, beautiful crime scene"* — a generated SaaS (45/100)
+
+---
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td align="center"><b>Landing</b></td>
+    <td align="center"><b>Loading</b></td>
+    <td align="center"><b>Result</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/landing.png" alt="landing page" /></td>
+    <td><img src="docs/screenshots/loading.png" alt="loading screen" /></td>
+    <td><img src="docs/screenshots/result.png" alt="result page" /></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center"><b>Share card — full</b></td>
+    <td align="center"><b>Share card — score only</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/card-full.png" alt="full share card" /></td>
+    <td><img src="docs/screenshots/card-score.png" alt="score-only share card" /></td>
+  </tr>
+</table>
 
 ---
 
