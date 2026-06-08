@@ -30,6 +30,14 @@ export function isApiRouteFile(path: string): boolean {
   if (/^app\/.+\/route\.(ts|js|tsx|jsx|mjs)$/.test(path)) return true;
   // Next Pages Router
   if (/^pages\/api\//.test(path) && /\.(ts|js|tsx|jsx|mjs)$/.test(path)) return true;
+  // Common API/function folders
+  if (/^(api|functions)\/.+\.(ts|js|tsx|jsx|mjs)$/.test(path)) return true;
+  // Cloudflare Worker / Hono entrypoints
+  if (/^(src\/)?(index|worker|server|app)\.(ts|js|mjs)$/.test(path)) return true;
+  // Supabase Edge Functions
+  if (/^supabase\/functions\/[^/]+\/index\.(ts|js|mjs)$/.test(path)) return true;
+  // tRPC routers/procedures
+  if (/(^|\/)(trpc|routers?)\/.+\.(ts|js|tsx|jsx|mjs)$/.test(path)) return true;
   // Convention-based server folders
   if (/^server\/.+\.(ts|js)$/.test(path)) return true;
   return false;

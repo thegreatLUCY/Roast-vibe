@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../App';
 
 type Severity = 'cosmetic' | 'smell' | 'real_risk' | 'catastrophic';
-type Tier = 'catastrophic' | 'vibe_coder_special' | 'surprisingly_functional' | 'production_adjacent';
-type Generator = 'lovable' | 'bolt' | 'v0' | 'replit' | 'cursor' | 'claude_code' | 'unknown';
+type Tier = 'catastrophic' | 'vibe_coder_special' | 'surprisingly_functional' | 'production_adjacent' | 'suspiciously_clean';
+type Generator = 'lovable' | 'bolt' | 'v0' | 'replit' | 'cursor' | 'claude_code' | 'codex' | 'unknown';
 
 interface Finding {
   ruleId: string;
@@ -49,6 +49,7 @@ const TIER_LABEL: Record<Tier, string> = {
   vibe_coder_special: 'VIBE-CODER SPECIAL',
   surprisingly_functional: 'SURPRISINGLY FUNCTIONAL',
   production_adjacent: 'PRODUCTION-ADJACENT',
+  suspiciously_clean: 'SUSPICIOUSLY CLEAN',
 };
 
 // Fallback only when the LLM doesn't provide a tagline; intentionally short.
@@ -57,6 +58,7 @@ const TIER_FALLBACK: Record<Tier, string> = {
   vibe_coder_special: 'a working demo and many time bombs',
   surprisingly_functional: 'better than expected',
   production_adjacent: 'suspiciously competent',
+  suspiciously_clean: 'almost embarrassment-free',
 };
 
 const GENERATOR_LABEL: Record<Generator, string | null> = {
@@ -66,6 +68,7 @@ const GENERATOR_LABEL: Record<Generator, string | null> = {
   replit: 'Made with Replit Agent',
   cursor: 'Vibe-coded via Cursor',
   claude_code: 'Built with Claude Code',
+  codex: 'Built with Codex',
   unknown: null,
 };
 

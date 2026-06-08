@@ -62,6 +62,7 @@ const TIER_LABEL: Record<Tier, string> = {
   vibe_coder_special: 'VIBE-CODER SPECIAL',
   surprisingly_functional: 'SURPRISINGLY FUNCTIONAL',
   production_adjacent: 'PRODUCTION-ADJACENT',
+  suspiciously_clean: 'SUSPICIOUSLY CLEAN',
 };
 
 const TIER_FALLBACK: Record<Tier, string> = {
@@ -69,6 +70,7 @@ const TIER_FALLBACK: Record<Tier, string> = {
   vibe_coder_special: 'a working demo and many time bombs',
   surprisingly_functional: 'better than expected',
   production_adjacent: 'suspiciously competent',
+  suspiciously_clean: 'almost embarrassment-free',
 };
 
 const GENERATOR_LABEL: Record<Generator, string | null> = {
@@ -78,6 +80,7 @@ const GENERATOR_LABEL: Record<Generator, string | null> = {
   replit: 'Made with Replit Agent',
   cursor: 'Vibe-coded via Cursor',
   claude_code: 'Built with Claude Code',
+  codex: 'Built with Codex',
   unknown: null,
 };
 

@@ -108,13 +108,23 @@ The single most important architectural principle: **cheap work first, expensive
 
 | Bucket | Rule count | Cap |
 |---|---|---|
-| Secrets (catastrophic) | ~6 | -30 |
-| Auth & DB sins | ~5 | -25 |
+| Secrets (catastrophic) | ~6 | -50 |
+| Auth & DB sins | ~5 | -30 |
 | AI-slop tells (the funny ones) | ~8 | -20 |
-| Tool classifier (Lovable/Bolt/v0/Replit/Cursor) | ~5 | 0 (not scored, used for roast flavor) |
-| Quality smells | ~4 | -10 |
+| Tool classifier (Lovable/Bolt/v0/Replit/Cursor/Claude Code/Codex) | ~7 | 0 (not scored, used for roast flavor) |
+| Quality smells | ~4 | -5 |
 
 `score = max(0, 100 - sum_of_capped_deductions)`
+
+Scoring then applies a production-readiness realism pass:
+- Findings are classified by axis: production risk, vibe residue, quality, or classifier.
+- Findings have confidence: high, medium, or low. Low-confidence findings are roast flavor only.
+- Corroborated failure modes can add small combo deductions.
+- Certain severe findings impose maximum score ceilings. For example, exposed Supabase `service_role` caps at 25, client-reachable real secrets cap at 35, repeated unauthenticated data APIs cap at 40, real-looking committed `.env` plus missing Supabase migrations caps at 45, real-looking committed `.env` files cap at 50, single unauthenticated DB APIs cap at 55, and client-only route protection caps at 75.
+- Real server/API CORS wildcard keeps a repo out of `suspiciously_clean` by capping at 89.
+- Browser-only fake backends are treated as real production failures: protected-looking apps that store both auth state and business data in browser storage cap at 50.
+- Vibe-only findings cannot drag an app below 75, and cosmetic/low-confidence-only findings cannot drag it below 85.
+- Repos without a production surface are not scored like production SaaS apps.
 
 ### Score tiers (drive card color + headline)
 
@@ -123,11 +133,12 @@ The single most important architectural principle: **cheap work first, expensive
 | 0–25 | Catastrophic | Blood red |
 | 26–50 | Vibe-Coder Special | Orange |
 | 51–75 | Surprisingly Functional | Yellow |
-| 76–100 | Production-Adjacent | Green |
+| 76–89 | Production-Adjacent | Green |
+| 90–100 | Suspiciously Clean | Green |
 
 ### Seed rules (initial set)
 
-**Secrets / Catastrophic (-10 to -20 each, capped at -30):**
+**Secrets / Catastrophic (-10 to -20 each, capped at -50):**
 - `.env*` committed with real-looking values
 - OpenAI key (`sk-...`) in client bundle
 - Anthropic key (`sk-ant-...`) in client bundle
@@ -136,8 +147,9 @@ The single most important architectural principle: **cheap work first, expensive
 - GitHub PAT (`ghp_...`, `github_pat_...`)
 - Supabase `service_role` JWT in client-reachable code or `NEXT_PUBLIC_*` / `VITE_*` env var
 - Hardcoded JWT signing secret
+- Secret/env var with a hardcoded fallback literal, e.g. `process.env.JWT_SECRET || "temporary-dev-secret"`
 
-**Auth & DB sins (-4 to -12 each, capped at -25):**
+**Auth & DB sins (-4 to -12 each, capped at -30):**
 - API routes touching DB with no auth call (`getServerSession`, `auth()`, `supabase.auth.getUser()`, etc.)
 - Client-side-only route protection
 - SQL via string concat / unsafe template literal
@@ -152,6 +164,9 @@ The single most important architectural principle: **cheap work first, expensive
 - `TODO: add auth` / `TODO: implement` density per 1K LoC
 - Placeholder strings shipped (`Lorem ipsum`, `John Doe`, `jane@example.com`, `Acme Inc`)
 - `mockUsers` / `dummyData` / `fakeProducts` referenced from rendered components
+- Production-looking dashboards/storefronts backed by hardcoded arrays
+- Protected-looking apps persisting orders, patients, customers, invoices, bookings, etc. in `localStorage`
+- Checkout/order/payment flows that complete only in frontend code
 - Default `<title>Vite + React</title>` / `Create Next App` / `lovable-generated-project`
 - README starts with `# Welcome to your <Tool> project`
 - `alert()` / `confirm()` used as production UI
@@ -162,7 +177,7 @@ The single most important architectural principle: **cheap work first, expensive
 - Bolt.new: exact `vite + react + lucide + tailwind + eslint-plugin-react-refresh` set, no router, no tests
 - v0: `components.json` + `components/ui/` shadcn primitives + `app/` router + `geist`
 - Replit Agent: `.replit`, `replit.nix`, `@neondatabase/serverless` + drizzle + express triad
-- Cursor / Claude Code: `.cursorrules`, `.cursor/rules/`, `CLAUDE.md`, `.claude/`
+- Cursor / Claude Code / Codex: `.cursorrules`, `.cursor/rules/`, `CLAUDE.md`, `.claude/`, `AGENTS.md`, `.codex/`, README Codex mentions
 
 **Quality smells (-1 to -3 each, capped at -10):**
 - Two+ state libs (redux + zustand + jotai)
@@ -181,7 +196,7 @@ The single most important architectural principle: **cheap work first, expensive
 **Prompt input:**
 - The findings list (structured: rule name, severity, evidence/line refs).
 - 5–10 worst-offender code snippets (the actual leaked-key line, the worst function, etc.).
-- The detected generator tool (Lovable/Bolt/v0/etc.) if any.
+- The detected generator tool (Lovable/Bolt/v0/Claude Code/Codex/etc.) if any.
 - The score and tier.
 
 **Prompt output:** sectioned roast.

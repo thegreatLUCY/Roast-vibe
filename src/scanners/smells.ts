@@ -54,7 +54,7 @@ export function smellScanners(repo: ScannedRepo): Finding[] {
   const asyncNoTryFiles: string[] = [];
   for (const file of repo.files) {
     if (!/\.(ts|js|tsx|jsx|mjs)$/.test(file.path)) continue;
-    if (/\.(test|spec)\./i.test(file.path) || file.path.includes('__tests__')) continue;
+    if (isNonProductionPath(file.path)) continue;
     const asyncFns = countMatches(file.content, /\basync\s+(function|\(|[a-zA-Z_$][\w$]*\s*=\s*\()/);
     const awaits = countMatches(file.content, /\bawait\s+/);
     const tries = countMatches(file.content, /\btry\s*\{/);
@@ -98,4 +98,9 @@ export function smellScanners(repo: ScannedRepo): Finding[] {
   }
 
   return findings;
+}
+
+function isNonProductionPath(path: string): boolean {
+  return /\.(test|spec|manual|e2e)\./i.test(path)
+    || /\b(__tests__|tests?|specs?|fixtures?|mocks?|examples?|playgrounds?|demos?|e2e)\//i.test(path);
 }

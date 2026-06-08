@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, ScanResult } from './types';
-import { parseRepoUrl } from './github';
+import { parseRepoUrl, fetchRepoMeta } from './github';
 import { checkRateLimits, getIp } from './ratelimit';
 import { errorFromCode } from './errors';
 
@@ -35,7 +35,18 @@ app.post('/api/scan', async (c) => {
     return c.json(p, p.status as 429);
   }
 
-  const doName = `${parsed.owner}/${parsed.name}`.toLowerCase();
+  // Resolve repo meta up front so the DO can be keyed by commit SHA.
+  // This makes new commits produce a new DO (no stale cached results).
+  let meta;
+  try {
+    meta = await fetchRepoMeta(parsed.owner, parsed.name, c.env.GITHUB_PAT);
+  } catch (e: any) {
+    const p = errorFromCode('SCAN_FAILED', String(e?.message ?? e));
+    return c.json(p, p.status as 500);
+  }
+
+  const sha = meta.sha.toLowerCase();
+  const doName = `${parsed.owner}/${parsed.name}@${sha}`.toLowerCase();
   const id = c.env.SCAN_RUNNER.idFromName(doName);
   const stub = c.env.SCAN_RUNNER.get(id);
 
@@ -43,7 +54,7 @@ app.post('/api/scan', async (c) => {
     const r = await stub.fetch('https://do/scan', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(parsed),
+      body: JSON.stringify({ ...parsed, meta }),
     });
     const text = await r.text();
     return new Response(text, {
@@ -186,9 +197,9 @@ app.get('/r/:id', async (c) => {
 function stubFromScanId(env: Env, id: string): DurableObjectStub | null {
   const parts = id.split('--');
   if (parts.length !== 3) return null;
-  const [owner, name, sha7] = parts;
-  if (!owner || !name || !/^[a-f0-9]{7}$/i.test(sha7)) return null;
-  const doName = `${owner}/${name}`.toLowerCase();
+  const [owner, name, sha] = parts;
+  if (!owner || !name || !/^[a-f0-9]{40}$/i.test(sha)) return null;
+  const doName = `${owner}/${name}@${sha}`.toLowerCase();
   const stubId = env.SCAN_RUNNER.idFromName(doName);
   return env.SCAN_RUNNER.get(stubId);
 }

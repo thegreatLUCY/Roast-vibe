@@ -2,6 +2,10 @@ export type Severity = 'cosmetic' | 'smell' | 'real_risk' | 'catastrophic';
 
 export type Bucket = 'secrets' | 'auth_db' | 'ai_slop' | 'classifier' | 'smell';
 
+export type Confidence = 'high' | 'medium' | 'low';
+
+export type ScoreAxis = 'risk' | 'vibe' | 'quality' | 'classifier';
+
 export type Generator =
   | 'lovable'
   | 'bolt'
@@ -9,18 +13,22 @@ export type Generator =
   | 'replit'
   | 'cursor'
   | 'claude_code'
+  | 'codex'
   | 'unknown';
 
 export type Tier =
   | 'catastrophic'
   | 'vibe_coder_special'
   | 'surprisingly_functional'
-  | 'production_adjacent';
+  | 'production_adjacent'
+  | 'suspiciously_clean';
 
 export interface Finding {
   ruleId: string;
   bucket: Bucket;
   severity: Severity;
+  confidence?: Confidence;
+  axis?: ScoreAxis;
   points: number; // positive value; will be subtracted
   title: string;
   evidence: {
@@ -28,6 +36,16 @@ export interface Finding {
     line?: number;
     snippet?: string;
   };
+}
+
+export interface ScoreDetails {
+  productionSurface: boolean;
+  riskScore: number;
+  vibeScore: number;
+  qualityScore: number;
+  confidenceCounts: Record<Confidence, number>;
+  appliedCeilings: { ruleId: string; maxScore: number; reason: string }[];
+  comboRules: { id: string; points: number; reason: string }[];
 }
 
 export interface ScannedFile {
@@ -68,6 +86,7 @@ export interface ScanResult {
   score: number;
   tier: Tier;
   deductionsByBucket: Record<Bucket, number>;
+  scoreDetails: ScoreDetails;
   roast: { tagline: string; sins: string[]; verdict: string };
   createdAt: number;
 }

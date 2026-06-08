@@ -9,6 +9,10 @@
     { "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": false }
   ],
 
+  "routes": [
+    { "pattern": "roastvibe.thegreatlucy.com", "custom_domain": true }
+  ],
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

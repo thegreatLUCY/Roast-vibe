@@ -45,7 +45,11 @@ function lovableHits(s: Signals): Hit[] {
   if (has(s, 'src/integrations/supabase/client.ts')) h.push({ points: 60, strong: true });
   if (s.viteConfig.includes('lovable-tagger')) h.push({ points: 80, strong: true });
   // WEAK: text mentions, structural guesses
-  if (s.readme.includes('lovable')) h.push({ points: 40, strong: false });
+  if (s.readme.match(/(welcome to your lovable project|built with lovable|made with lovable|tech[-:\s|]*.*lovable|lovable-generated-project)/i)) {
+    h.push({ points: 55, strong: true });
+  } else if (s.readme.includes('lovable')) {
+    h.push({ points: 40, strong: false });
+  }
   if (has(s, 'src/pages/Index.tsx') && has(s, 'src/pages/NotFound.tsx')) h.push({ points: 25, strong: false });
   if (dep(s, '@supabase/supabase-js') && (anyPath(s, /^components\/ui\//) || dep(s, 'shadcn-ui'))) h.push({ points: 15, strong: false });
   if (anyPath(s, /bun\.lockb?$/) && dep(s, '@supabase/supabase-js')) h.push({ points: 10, strong: false });
@@ -62,20 +66,22 @@ function boltHits(s: Signals): Hit[] {
     if (!dep(s, 'react-router-dom') && !dep(s, '@tanstack/react-router')) h.push({ points: 15, strong: false });
     if (!dep(s, 'vitest') && !dep(s, '@playwright/test') && !dep(s, 'jest')) h.push({ points: 10, strong: false });
   }
-  if (s.readme.includes('bolt.new') || s.readme.includes('stackblitz')) h.push({ points: 50, strong: false });
+  if (s.readme.match(/(built with bolt\.new|made with bolt\.new|generated with bolt\.new|bolt\.new)/i)) h.push({ points: 55, strong: true });
+  else if (s.readme.includes('stackblitz')) h.push({ points: 50, strong: false });
   return h;
 }
 
 function v0Hits(s: Signals): Hit[] {
   const h: Hit[] = [];
-  // STRONG
-  if (has(s, 'components.json')) h.push({ points: 60, strong: true });
-  if (dep(s, 'geist')) h.push({ points: 40, strong: true });
-  if (anyPath(s, /^components\/ui\/(button|card|dialog|input)\.tsx$/)) h.push({ points: 35, strong: true });
+  // STRONG: geist + v0-specific README mention + nextConfig signature
+  // `components.json` alone is shadcn-init output, NOT a v0 signal — demoted to weak.
+  if (dep(s, 'geist')) h.push({ points: 60, strong: true });
+  if (s.nextConfig.match(/created (with|by|using) v0/i)) h.push({ points: 60, strong: true });
+  if (s.readme.includes('v0.dev') || s.readme.includes('v0 by vercel')) h.push({ points: 50, strong: true });
   // WEAK
-  if (s.readme.includes('v0.dev') || s.readme.includes('v0 by vercel')) h.push({ points: 60, strong: false });
-  if (has(s, 'app/page.tsx') && has(s, 'components.json')) h.push({ points: 20, strong: false });
-  if (s.nextConfig.match(/created (with|by|using) v0/i)) h.push({ points: 30, strong: false });
+  if (has(s, 'components.json')) h.push({ points: 15, strong: false });
+  if (anyPath(s, /^components\/ui\/(button|card|dialog|input)\.tsx$/)) h.push({ points: 15, strong: false });
+  if (has(s, 'app/page.tsx') && has(s, 'components.json')) h.push({ points: 10, strong: false });
   return h;
 }
 
@@ -105,6 +111,15 @@ function claudeCodeHits(s: Signals): Hit[] {
   return h;
 }
 
+function codexHits(s: Signals): Hit[] {
+  const h: Hit[] = [];
+  if (has(s, 'AGENTS.md')) h.push({ points: 45, strong: false });
+  if (anyPath(s, /^\.codex\//)) h.push({ points: 70, strong: true });
+  if (s.readme.match(/(built|made|generated|implemented|created) with (openai )?codex/i)) h.push({ points: 65, strong: true });
+  if (s.readme.match(/\bcodex\b/i) && s.readme.match(/\b(gpt-5|openai|agent|agents\.md)\b/i)) h.push({ points: 50, strong: true });
+  return h;
+}
+
 export function detectGenerator(repo: ScannedRepo): Generator {
   const s = gather(repo);
 
@@ -115,6 +130,7 @@ export function detectGenerator(repo: ScannedRepo): Generator {
     { gen: 'replit',      hits: replitHits(s) },
     { gen: 'cursor',      hits: cursorHits(s) },
     { gen: 'claude_code', hits: claudeCodeHits(s) },
+    { gen: 'codex',       hits: codexHits(s) },
   ];
 
   // Require at least one structural (strong) signal to award a badge.

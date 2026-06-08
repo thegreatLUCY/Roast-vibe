@@ -1,5 +1,5 @@
 import type { Env, ScanResult } from '../types';
-import { buildScannedRepo, fetchRepoMeta } from '../github';
+import { buildScannedRepo, fetchRepoMeta, type RepoMeta } from '../github';
 import { runScanners } from '../scanners';
 import { calculateScore } from '../score';
 import { generateRoast, pickSnippets } from '../roast';
@@ -9,6 +9,7 @@ import { errorFromCode, errorFromException } from '../errors';
 interface StartScanPayload {
   owner: string;
   name: string;
+  meta?: RepoMeta;
 }
 
 export class ScanRunner {
@@ -77,12 +78,15 @@ export class ScanRunner {
 
     const { owner, name } = payload;
 
-    let meta;
-    try {
-      meta = await fetchRepoMeta(owner, name, this.env.GITHUB_PAT);
-    } catch (e) {
-      const p = errorFromException(e);
-      return Response.json(p, { status: p.status });
+    // Prefer meta passed from the worker (resolved once for DO-keying); fall back to fetching here.
+    let meta = payload.meta;
+    if (!meta) {
+      try {
+        meta = await fetchRepoMeta(owner, name, this.env.GITHUB_PAT);
+      } catch (e) {
+        const p = errorFromException(e);
+        return Response.json(p, { status: p.status });
+      }
     }
 
     const maxSizeKb = Number(this.env.MAX_REPO_SIZE_KB) || 5000;
@@ -106,7 +110,7 @@ export class ScanRunner {
     }
 
     const { findings, generator } = runScanners(repo);
-    const { score, tier, deductionsByBucket } = calculateScore(findings);
+    const { score, tier, deductionsByBucket, scoreDetails } = calculateScore(findings, repo);
 
     const snippets = pickSnippets(findings);
 
@@ -121,7 +125,7 @@ export class ScanRunner {
       return Response.json(p, { status: p.status });
     }
 
-    const scanId = `${owner}--${name}--${meta.sha.slice(0, 7)}`.toLowerCase();
+    const scanId = `${owner}--${name}--${meta.sha}`.toLowerCase();
     const result: ScanResult = {
       scanId,
       repo: `${owner}/${name}`,
@@ -132,6 +136,7 @@ export class ScanRunner {
       score,
       tier,
       deductionsByBucket,
+      scoreDetails,
       roast,
       createdAt: Date.now(),
     };

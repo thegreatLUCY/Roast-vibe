@@ -20,11 +20,13 @@ const PATTERNS: Pattern[] = [
 
 // Files we don't penalize secrets in
 function isAllowList(path: string): boolean {
-  return /\.env\.example$/i.test(path)
-    || /\.env\.sample$/i.test(path)
+  return /\.env\.(example|sample|dist|template)$/i.test(path)
+    || /\.env\.[a-z]+\.(example|sample|dist|template)$/i.test(path)
+    || /\.env\.test$/i.test(path)
     || /\bREADME/i.test(path)
     || /\bCHANGELOG/i.test(path)
-    || /\b(docs?|examples?)\//i.test(path);
+    || /\b(docs?|examples?|playgrounds?|demos?|openspec)\//i.test(path)
+    || /\b(__tests__|tests?|specs?|fixtures?|mocks?|e2e)\//i.test(path);
 }
 
 function isClientReachable(path: string): boolean {
@@ -54,9 +56,11 @@ export function secretScanners(repo: ScannedRepo): Finding[] {
 
   // 1. .env committed
   const envFiles = repo.allPaths.filter(p =>
-    /(^|\/)\.env$/.test(p) ||
-    /(^|\/)\.env\.local$/.test(p) ||
-    /(^|\/)\.env\.production$/.test(p),
+    !isAllowList(p) && (
+      /(^|\/)\.env$/.test(p) ||
+      /(^|\/)\.env\.local$/.test(p) ||
+      /(^|\/)\.env\.production$/.test(p)
+    ),
   );
   for (const p of envFiles) {
     const f = repo.files.find(x => x.path === p);
@@ -76,18 +80,6 @@ export function secretScanners(repo: ScannedRepo): Finding[] {
       points: realLooking ? 18 : 6,
       title: realLooking ? `.env file committed with real-looking values (${p})` : `.env file committed (${p})`,
       evidence: { file: p, snippet: f ? f.content.split('\n').slice(0, 3).join('\n') : undefined },
-    });
-  }
-
-  // 1b. .env not in .gitignore
-  if (repo.hasGitignore && !repo.envInGitignore && envFiles.length === 0) {
-    findings.push({
-      ruleId: 'secrets.env_not_gitignored',
-      bucket: 'secrets',
-      severity: 'smell',
-      points: 3,
-      title: '.env files are not in .gitignore',
-      evidence: { file: '.gitignore' },
     });
   }
 
@@ -137,6 +129,20 @@ export function secretScanners(repo: ScannedRepo): Finding[] {
         points: 15,
         title: `Secret-named env var prefixed for the client bundle: ${pubSecret[0]}`,
         evidence: firstLineMatch(file, pubSecret[0]),
+      });
+    }
+
+    // 5. Secret/env fallback literals. AI agents often add these so the app "just runs";
+    // in production they silently convert missing env config into shared credentials.
+    const secretFallback = /\b(?:process\.env|import\.meta\.env)\.[A-Z0-9_]*(?:SECRET|TOKEN|KEY|PASSWORD|SERVICE_ROLE|JWT)[A-Z0-9_]*\s*(?:\|\||\?\?)\s*["'][^"']{6,}["']/i;
+    if (secretFallback.test(file.content) && !isAllowList(file.path)) {
+      findings.push({
+        ruleId: 'secrets.env_secret_fallback',
+        bucket: 'secrets',
+        severity: 'real_risk',
+        points: 10,
+        title: 'Secret env var has a hardcoded fallback literal',
+        evidence: firstLineMatch(file, secretFallback),
       });
     }
   }

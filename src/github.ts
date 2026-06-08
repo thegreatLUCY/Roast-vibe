@@ -3,12 +3,13 @@ import type { ScannedFile, ScannedRepo, PackageJson } from './types';
 const GH = 'https://api.github.com';
 
 function headers(pat: string): HeadersInit {
-  return {
-    'Authorization': `Bearer ${pat}`,
+  const h: HeadersInit = {
     'User-Agent': 'roastvibe-scanner',
     'Accept': 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
+  if (pat) h.Authorization = `Bearer ${pat}`;
+  return h;
 }
 
 export function parseRepoUrl(input: string): { owner: string; name: string } | null {

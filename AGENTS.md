@@ -33,7 +33,7 @@ For full design rationale and decisions log, see [`SPEC.md`](./SPEC.md). For the
 | Component | Tech | Notes |
 |---|---|---|
 | Runtime | Cloudflare Workers | Free plan. Edge runtime, not Node — no `fs`, no `child_process`, no native modules |
-| API framework | Hono | Routes live in `src/api/` |
+| API framework | Hono | Routes currently live in `src/index.ts` |
 | Long-running scan | Durable Object `ScanRunner` | SQLite-backed; ID = `owner/repo@sha` |
 | Relational data | D1 | Rate limits, newsletter signups, reports |
 | Image storage | DO SQLite (PNG blobs) | **Not R2.** R2 requires a card; we don't use it |
@@ -44,7 +44,7 @@ For full design rationale and decisions log, see [`SPEC.md`](./SPEC.md). For the
 
 ---
 
-## Directory layout (target — may not all exist yet)
+## Directory layout
 
 ```
 roastvibe/
@@ -54,25 +54,20 @@ roastvibe/
 ├── wrangler.jsonc               ← CF Workers config: bindings, DOs, D1, assets
 ├── package.json
 ├── src/
-│   ├── index.ts                 ← Worker entry, Hono routing
-│   ├── api/
-│   │   ├── scan.ts              ← POST /scan
-│   │   ├── result.ts            ← GET /result/:id
-│   │   ├── card.ts              ← GET /card/:id.png
-│   │   └── newsletter.ts        ← POST /newsletter
+│   ├── index.ts                 ← Worker entry, Hono API routes + OG meta route
 │   ├── do/
 │   │   └── ScanRunner.ts        ← Durable Object: orchestrates the scan
 │   ├── scanners/                ← Deterministic rules. One file per bucket.
 │   │   ├── secrets.ts
-│   │   ├── auth-db.ts
-│   │   ├── ai-slop.ts
+│   │   ├── authdb.ts
+│   │   ├── aislop.ts
 │   │   ├── classifier.ts
 │   │   └── smells.ts
 │   ├── score.ts                 ← Findings → score. Pure function. Capped per bucket.
 │   ├── roast.ts                 ← OpenRouter call. Prompt + findings → roast text
 │   ├── github.ts                ← GitHub API helpers (tree fetch, file fetch, size check)
 │   ├── card/
-│   │   ├── render.tsx           ← Satori JSX layout
+│   │   ├── render.ts            ← Satori layout
 │   │   └── fonts.ts             ← Font loading
 │   ├── ratelimit.ts             ← D1-backed rate limiter
 │   └── types.ts                 ← Shared types: Finding, Severity, ScanResult, etc.
@@ -80,7 +75,6 @@ roastvibe/
 │   ├── src/
 │   │   ├── pages/
 │   │   │   ├── Landing.tsx
-│   │   │   ├── Loading.tsx      ← fake-progress UI
 │   │   │   └── Result.tsx
 │   │   └── ...
 │   └── vite.config.ts
@@ -95,34 +89,47 @@ The scanner pipeline revolves around a small set of types:
 
 ```ts
 type Severity = 'cosmetic' | 'smell' | 'real_risk' | 'catastrophic';
+type Confidence = 'high' | 'medium' | 'low';
+type ScoreAxis = 'risk' | 'vibe' | 'quality' | 'classifier';
 
 interface Finding {
   ruleId: string;          // e.g. "secrets.openai_key_in_client"
   bucket: 'secrets' | 'auth_db' | 'ai_slop' | 'classifier' | 'smell';
   severity: Severity;
-  pointsDeducted: number;  // before bucket cap
+  confidence?: Confidence;
+  axis?: ScoreAxis;
+  points: number;          // positive deduction before bucket cap
   title: string;           // short human label, used in card and roast
   evidence: {              // proof — also fed to LLM as snippet context
-    file: string;
+    file?: string;
     line?: number;
     snippet?: string;
   };
 }
 
 interface ScanResult {
+  scanId: string;
   repo: string;            // "owner/name"
   sha: string;
-  generator: 'lovable' | 'bolt' | 'v0' | 'replit' | 'cursor' | 'unknown';
+  defaultBranch: string;
+  generator: 'lovable' | 'bolt' | 'v0' | 'replit' | 'cursor' | 'claude_code' | 'codex' | 'unknown';
   findings: Finding[];
   score: number;           // 0..100
-  tier: 'catastrophic' | 'vibe_coder_special' | 'surprisingly_functional' | 'production_adjacent';
+  tier: 'catastrophic' | 'vibe_coder_special' | 'surprisingly_functional' | 'production_adjacent' | 'suspiciously_clean';
+  deductionsByBucket: Record<'secrets' | 'auth_db' | 'ai_slop' | 'classifier' | 'smell', number>;
+  scoreDetails: {
+    productionSurface: boolean;
+    riskScore: number;
+    vibeScore: number;
+    qualityScore: number;
+    confidenceCounts: Record<Confidence, number>;
+    appliedCeilings: { ruleId: string; maxScore: number; reason: string }[];
+    comboRules: { id: string; points: number; reason: string }[];
+  };
   roast: {
+    tagline: string;
     sins: string[];        // 3-5 bullets
     verdict: string;       // 2-3 sentences
-  };
-  cards: {
-    full: ArrayBuffer;     // PNG
-    scoreOnly: ArrayBuffer;
   };
   createdAt: number;
 }
@@ -138,13 +145,17 @@ Treat these as load-bearing. If you change them, check every consumer.
 
 | Bucket | Cap | Examples |
 |---|---|---|
-| Secrets | -30 | Committed `.env`, `sk-...` in client, Supabase `service_role` JWT exposed |
-| Auth & DB | -25 | API route with no auth call, SQL string concat, no RLS migrations |
-| AI-slop tells | -20 | `// In a real app...`, default `<title>Vite + React</title>`, `mockUsers` in render |
+| Secrets | -50 | Committed `.env`, `sk-...` in client, Supabase `service_role` JWT exposed, hardcoded secret fallback |
+| Auth & DB | -30 | API route with no auth call, SQL string concat, no RLS migrations, client-only route protection |
+| AI-slop tells | -20 | `// In a real app...`, hardcoded production arrays, browser-only business-data persistence, fake frontend checkout |
 | Classifier | 0 | Not scored — used to flavor the roast |
-| Quality smells | -10 | Two state libs, async handler no try/catch, 500+ LoC component |
+| Quality smells | -5 | Two state libs, async handler no try/catch, 500+ LoC component |
 
 `score = max(0, 100 - sum_of_capped_deductions)`
+
+After bucket caps, `src/score.ts` applies confidence weighting, risk/vibe/quality detail scores, combo deductions for corroborated failures, score ceilings for severe production risks, and floors so vibe-only/cosmetic-only findings do not masquerade as catastrophes. Repeated unauthenticated data APIs cap at 40. Real-looking committed `.env` plus missing Supabase migrations caps at 45. Real-looking committed `.env` files cap at 50. Protected apps that store both auth state and business data only in browser storage are also capped at 50 because that is a fake backend, not a rough edge.
+
+Score tiers: 0–25 catastrophic, 26–50 vibe-coder special, 51–75 surprisingly functional, 76–89 production-adjacent, 90–100 suspiciously clean.
 
 Full rule list in `SPEC.md` §5.
 
@@ -176,8 +187,8 @@ Full rule list in `SPEC.md` §5.
 | Add a new scanner rule | `src/scanners/<bucket>.ts`, `src/types.ts` (if new ruleId pattern), tests |
 | Change point values | `src/scanners/*` (rule definitions), maybe `src/score.ts` if bucket caps change |
 | Tweak the roast prompt | `src/roast.ts` |
-| Change card layout | `src/card/render.tsx` |
-| Add a new API route | `src/api/<name>.ts`, register in `src/index.ts` |
+| Change card layout | `src/card/render.ts` |
+| Add a new API route | `src/index.ts` (or extract to `src/api/<name>.ts` first if routing grows) |
 | Change rate limits | `src/ratelimit.ts` and constants near top |
 | Add a new generator to the classifier | `src/scanners/classifier.ts`, plus add to `generator` union in `src/types.ts`, plus update roast prompt to reference it |
 
