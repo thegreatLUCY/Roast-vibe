@@ -14,7 +14,7 @@ const CARDS = [
   { c: 'var(--accent)', t: 'SECRETS', d: 'OpenAI / Stripe / Supabase service_role JWTs leaked into client bundles' },
   { c: 'var(--accent-warm)', t: 'AUTH & DB', d: 'API routes with no auth, SQL string concat, RLS quietly disabled' },
   { c: 'var(--accent-bright)', t: 'AI SLOP', d: '"// In a real app you would…" comments shipped to production' },
-  { c: 'var(--fg-dim)', t: 'FINGERPRINT', d: 'We detect Lovable, Bolt, v0, Replit, Cursor — and roast the tool' },
+  { c: 'var(--fg-dim)', t: 'FINGERPRINT', d: 'We detect Lovable, Bolt, v0, Replit, Cursor, Codex — and roast the tool' },
 ];
 
 export default function Landing() {
